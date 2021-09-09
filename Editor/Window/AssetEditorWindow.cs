@@ -6,10 +6,13 @@ using System.Reflection;
 using AssetEditor.Editor.Window;
 using UnityEditor;
 using UnityEditor.Animations;
+using UnityEditor.IMGUI.Controls;
+using UnityEditor.UIElements;
 using UnityEngine;
 using UnityEngine.AI;
 using UnityEngine.Audio;
 using UnityEngine.Playables;
+using UnityEngine.UIElements;
 using UnityEngine.Video;
 using Object = UnityEngine.Object;
 
@@ -20,22 +23,19 @@ namespace AssetEditor.Editor
     {
         public static readonly List<AssetEditorWindow> Windows = new List<AssetEditorWindow>();
         public string[] assetFilterNames;
-        private int _filterSelectIdx;
-        private int _assetSelectIdx;
+        public AssetEditorWindow Instance => this;
+        const string Title = "AssetEditor";
+        private IMGUIContainer _imguiAssetInspectorContainer;
+        private ScrollView _imguiAssetInspectorScrollView;
+        private VisualElement _assetList;
 
-        private bool _filterSelected;
+        private string _currentFilterName;
         private string[] _currentAssetsPath;
-
-        private Object _selectAssetObject;
         private Type _currentAssetType;
 
-        private Vector2 _inspectorScrollPos;
-        private Vector2 _listScrollPos;
-
         private string _searchFilterName;
-        public AssetEditorWindow Instance => this;
-
-        const string Title = "AssetEditor";
+        private Object _selectAssetObject;
+        private Button _selectClickButton;
 
         [MenuItem("Window/AssetEditor")]
         public static void GetWindow()
@@ -68,119 +68,279 @@ namespace AssetEditor.Editor
         private void OnFocus()
         {
             assetFilterNames = AssetEditorPreference.Config.AssetFilterNames.ToArray();
-        }
-
-        private void OnGUI()
-        {
-            if (!Instance || assetFilterNames == null) return;
-            DrawAssetsFilterListGUI();
-            DrawCurrentSelectAssetsListGUI();
-            DrawSelectAssetInspector();
+            var sp = titleContent.text.Split(':');
+            if (sp.Length > 1)
+            {
+                OnFilterSelected(sp[1]);
+            }
+            else
+            {
+                DrawAssetsFilterListUIElement();
+            }
         }
 
         #endregion
 
-        #region DrawGUIMethod
-
-        private void DrawAssetsFilterListGUI()
+        private void DrawAssetsFilterListUIElement()
         {
-            if (!Instance || _filterSelected) return;
-            var rect = Instance.position;
-            DrawListGUI(new Rect(0, 0, rect.width, rect.height), assetFilterNames, value =>
+            rootVisualElement.Clear();
+            titleContent = new GUIContent(Title);
+            ScrollView filterScrollView = new ScrollView();
+            for (int i = 0; i < assetFilterNames.Length; i++)
             {
-                _filterSelectIdx = value;
-                _filterSelected = true;
-                titleContent = new GUIContent(string.Format("{0}:{1}", Title, assetFilterNames[_filterSelectIdx]));
-            });
-        }
-
-
-        private void DrawCurrentSelectAssetsListGUI()
-        {
-            if (!Instance || !_filterSelected) return;
-            if (assetFilterNames == null || assetFilterNames.Length <= 0 || _filterSelectIdx < 0 ||
-                _filterSelectIdx >= assetFilterNames.Length)
-            {
-                _filterSelected = false;
-                return;
-            }
-
-            var filterName = assetFilterNames[_filterSelectIdx];
-            if (string.IsNullOrWhiteSpace(filterName))
-            {
-                _filterSelected = false;
-                return;
-            }
-
-            var rect = Instance.position;
-
-            GUILayout.BeginArea(new Rect(0, 0, rect.width, rect.height * .05f),
-                AssetEditorStyles.FrameBoxstyle);
-            GUILayout.BeginHorizontal(GUILayout.ExpandHeight(true));
-            if (GUILayout.Button("Back", GUILayout.MaxWidth(rect.width * .25f)))
-            {
-                _filterSelected = false;
-                _selectAssetObject = null;
-                titleContent = new GUIContent(Title);
-            }
-
-            _searchFilterName = EditorGUILayout.TextField("", _searchFilterName, "SearchTextField",
-                GUILayout.MaxWidth(rect.width * .75f));
-
-            GUILayout.EndHorizontal();
-            GUILayout.EndArea();
-
-
-            _currentAssetsPath = GetAssetsPath(filterName);
-            if (_currentAssetsPath == null || _currentAssetsPath.Length <= 0) return;
-
-            Object[] assets = new Object[_currentAssetsPath.Length];
-            for (int i = 0; i < _currentAssetsPath.Length; i++)
-                assets[i] = AssetDatabase.LoadAssetAtPath(_currentAssetsPath[i], typeof(Object));
-
-            _currentAssetType = AssetDatabase.LoadAssetAtPath(_currentAssetsPath[0], typeof(Object)).GetType();
-            DrawAssetListGUI(new Rect(0, rect.height * .05f, rect.width * .25f, rect.height * .95f), assets,
-                value =>
+                var filterName = assetFilterNames[i];
+                Button filterSelectButton = new Button { text = filterName };
+                filterSelectButton.Add(new Image()
                 {
-                    _assetSelectIdx = value;
-                    var assetPath = _currentAssetsPath[_assetSelectIdx];
-                    _selectAssetObject = AssetDatabase.LoadAssetAtPath(assetPath, typeof(Object));
-                }
-                , ONContextClickHandler
-            );
+                    image = AssetPreview.GetMiniTypeThumbnail(GetBuildinAssetTypeByName(filterName)),
+                    style =
+                    {
+                        maxHeight = 25,
+                        maxWidth = 25,
+                        minHeight = 25,
+                        minWidth = 25,
+                    }
+                });
+                filterSelectButton.RegisterCallback<ClickEvent>(evt => OnFilterSelected(filterName));
+                filterScrollView.Add(filterSelectButton);
+            }
+
+            rootVisualElement.Add(filterScrollView);
         }
 
-        private void ONContextClickHandler(Event evt)
+        private void OnFilterSelected(string filterName)
+        {
+            DrawAssetEditorUIElement(filterName);
+        }
+
+        private void DrawAssetEditorUIElement(string filterName)
+        {
+            rootVisualElement.Clear();
+            _currentFilterName = filterName.Trim();
+            titleContent = new GUIContent(string.Format("{0}: {1}", Title, _currentFilterName),
+                AssetPreview.GetMiniTypeThumbnail(GetBuildinAssetTypeByName(_currentFilterName)));
+
+            VisualElement toolbar = new VisualElement()
+            {
+                name = "ToolBar",
+                style =
+                {
+                    minHeight = 20,
+                    maxHeight = 25,
+                    flexDirection = FlexDirection.Row
+                }
+            };
+
+            Button backButton = new Button
+            {
+                text = "Back",
+                style =
+                {
+                    width = new StyleLength(Length.Percent(10)),
+                }
+            };
+            backButton.RegisterCallback<ClickEvent>(evt => DrawAssetsFilterListUIElement());
+            //backButton.style.maxWidth = new StyleLength(Length.Percent(25));
+            toolbar.Add(backButton);
+
+            ToolbarSearchField searchTextField = new ToolbarSearchField()
+            {
+                style =
+                {
+                    width = new StyleLength(Length.Percent(90)),
+                }
+            };
+
+            searchTextField.value = _searchFilterName;
+            searchTextField.RegisterValueChangedCallback(evt =>
+                {
+                    _searchFilterName = evt.newValue;
+                    DrawAssetButtonListUIElement();
+                }
+            );
+            toolbar.Add(searchTextField);
+            rootVisualElement.Add(toolbar);
+            DrawAssetButtonListUIElement();
+        }
+
+        private void DrawAssetButtonListUIElement()
+        {
+            if (_assetList != null && rootVisualElement.Contains(_assetList))
+            {
+                _assetList.Clear();
+                rootVisualElement.Remove(_assetList);
+                _assetList = null;
+            }
+
+            _assetList = new VisualElement()
+            {
+                name = "AssetList",
+                style =
+                {
+                    minHeight = new StyleLength(Length.Percent(95)),
+                }
+            };
+            _assetList.style.flexDirection = FlexDirection.Row;
+            ScrollView assetScrollView = new ScrollView()
+            {
+                style =
+                {
+                    backgroundColor = new Color(48f / 255, 48f / 255, 48f / 255),
+                    minWidth = new StyleLength(Length.Percent(25)),
+                    width = new StyleLength(Length.Percent(25))
+                }
+            };
+
+
+            _assetList.Add(assetScrollView);
+            _currentAssetsPath = GetAssetsPath(_currentFilterName);
+            
+            if (_currentAssetsPath != null && _currentAssetsPath.Length > 0)
+            {
+                var loadObj = AssetDatabase.LoadAssetAtPath(_currentAssetsPath[0], typeof(Object));
+                _currentAssetType = loadObj.GetType();
+            }
+
+            if (_currentAssetsPath != null && _currentAssetsPath.Length > 0)
+            {
+                foreach (var path in _currentAssetsPath)
+                {
+                    var assetObj = AssetDatabase.LoadAssetAtPath(path, typeof(Object));
+                    Button assetButton = new Button
+                    {
+                        text = assetObj.name,
+                        userData = assetObj
+                    };
+                    assetButton.Add(new Image()
+                    {
+                        image = AssetPreview.GetMiniThumbnail(assetObj),
+                        style =
+                        {
+                            maxHeight = 25,
+                            maxWidth = 25,
+                            minHeight = 25,
+                            minWidth = 25,
+                        }
+                    });
+                    assetButton.RegisterCallback<ClickEvent>(evt =>
+                    {
+                        DrawAssetInspectorEditor(assetObj);
+                        DrawCurrentClickButtonBorderEffect(assetButton);
+                    });
+                    assetButton.RegisterCallback<ContextClickEvent>(evt => ONContextClickHandler(evt));
+                    assetScrollView.Add(assetButton);
+                }
+            }
+
+            //_assetList.RegisterCallback<ContextClickEvent>(evt => { ONContextClickHandler(evt); });
+            rootVisualElement.Add(_assetList);
+        }
+
+        private void DrawCurrentClickButtonBorderEffect(Button button)
+        {
+            if (_selectClickButton != null)
+                ResetButtonStyle(_selectClickButton);
+            _selectClickButton = button;
+            _selectClickButton.style.borderBottomColor = Color.cyan;
+            _selectClickButton.style.borderLeftColor = Color.cyan;
+            _selectClickButton.style.borderRightColor = Color.cyan;
+            _selectClickButton.style.borderTopColor = Color.cyan;
+        }
+
+
+        private void ONContextClickHandler(ContextClickEvent evt)
         {
             if (_currentAssetType == null) return;
+            var target = ((Button)evt.target);
+            var assetObj = (Object)target.userData;
+            var menu = new GenericMenu();
+            menu.AddItem(new GUIContent("Ping"), false, PingObject, assetObj);
 
-            if (_currentAssetType.BaseType == typeof(UnityEngine.ScriptableObject))
+            if (_selectClickButton != null)
             {
-                var menu = new GenericMenu();
-                menu.AddItem(new GUIContent("Create New"), false, CreateScritableObject);
-                //menu.AddSeparator("");
-                menu.ShowAsContext();
-                evt.Use();
+                var currentObj = (Object)_selectClickButton.userData;
+                if (currentObj == assetObj)
+                    menu.AddItem(new GUIContent("UnSelect"), false, RemoveAssetInspectorEditor, assetObj);
             }
+
+            menu.AddSeparator("");
+
+            if (assetObj.GetType().BaseType == typeof(ScriptableObject))
+                menu.AddItem(new GUIContent("Create New"), false, CreateScritableObject);
+
+            //menu.AddSeparator("");
+            menu.ShowAsContext();
+            evt.imguiEvent.Use();
+        }
+
+        private void DrawAssetInspectorEditor(Object assetObj)
+        {
+            if (_assetList == null) return;
+            RemoveAssetInspectorEditor(_selectAssetObject);
+            _selectAssetObject = assetObj;
+            _imguiAssetInspectorScrollView = new ScrollView()
+            {
+                contentViewport =
+                {
+                    style =
+                    {
+                        paddingTop = new StyleLength(Length.Percent(3)),
+                        width = new StyleLength(Length.Percent(115)),
+                        borderBottomLeftRadius = 12,
+                        borderBottomRightRadius = 12,
+                        borderTopLeftRadius = 12,
+                        borderTopRightRadius = 12,
+                    }
+                },
+                style =
+                {
+                    width = new StyleLength(Length.Percent(85)),
+                    paddingRight = new StyleLength(Length.Percent(10)),
+                    paddingLeft = new StyleLength(Length.Percent(1)),
+                    borderBottomColor = Color.cyan,
+                    borderTopColor = Color.cyan,
+                    borderLeftColor = Color.cyan,
+                    borderRightColor = Color.cyan,
+                    borderBottomLeftRadius = 12,
+                    borderBottomRightRadius = 12,
+                    borderTopLeftRadius = 12,
+                    borderTopRightRadius = 12,
+                    borderBottomWidth = 1,
+                    borderTopWidth = 1,
+                    borderLeftWidth = 1,
+                    borderRightWidth = 1,
+                }
+            };
+
+
+            Label assetInfoLabel = new Label()
+            {
+                style =
+                {
+                    paddingTop = 5, 
+                    paddingBottom = 5,
+                }
+            };
+            assetInfoLabel.text = string.Format("{0}:{1}", assetObj.GetType().Name, assetObj.name);
+            _imguiAssetInspectorScrollView.Add(assetInfoLabel);
+
+            _imguiAssetInspectorContainer = new IMGUIContainer();
+
+            //_imguiAssetInspectorContainer.style.minWidth= new StyleLength(Length.Percent(100));
+            //_imguiAssetInspectorContainer.style.minWidth = position.width-250;
+            //_imguiAssetInspectorContainer.style.maxWidth = new StyleLength(Length.Percent(100));
+            _imguiAssetInspectorContainer.onGUIHandler = DrawIMGUIInspector;
+            _imguiAssetInspectorScrollView.Add(_imguiAssetInspectorContainer);
+            _assetList.Add(_imguiAssetInspectorScrollView);
         }
 
 
-        private void DrawSelectAssetInspector()
+        private void DrawIMGUIInspector()
         {
-            if (!Instance || !_filterSelected) return;
-            if (_assetSelectIdx < 0 || _assetSelectIdx >= _currentAssetsPath.Length) return;
-            if (!_selectAssetObject) return;
-            var rect = Instance.position;
-
-
-            GUILayout.BeginArea(new Rect(rect.width * .25f, rect.height * .05f, rect.width * .75f, rect.height * .95f),
-                AssetEditorStyles.FrameBoxstyle);
-            GUILayout.Label(string.Format("{0}: {1}", assetFilterNames[_filterSelectIdx], _selectAssetObject.name));
-            _inspectorScrollPos = EditorGUILayout.BeginScrollView(_inspectorScrollPos);
             var editor = UnityEditor.Editor.CreateEditor(_selectAssetObject);
-
             if (editor)
             {
+                var rect = Instance.position;
                 // ReSharper disable once Unity.NoNullPropagation
                 editor?.OnInspectorGUI();
                 var previewRect = GUILayoutUtility.GetRect(rect.width * .5f, rect.height * .5f);
@@ -191,96 +351,8 @@ namespace AssetEditor.Editor
                 editor?.OnPreviewSettings();
                 GUILayout.EndHorizontal();
             }
-
-
-            EditorGUILayout.EndScrollView();
-
-            EditorGUILayout.BeginHorizontal(AssetEditorStyles.FrameBoxstyle);
-            if (GUILayout.Button("UnSelect"))
-            {
-                _assetSelectIdx = -1;
-            }
-
-
-            if (GUILayout.Button("Ping"))
-            {
-                //var item = AssetDatabase.LoadAssetAtPath<InventoryItem>(_itemAssetGuids[_selectIdx]);
-                Selection.activeObject = _selectAssetObject;
-                EditorGUIUtility.PingObject(_selectAssetObject);
-            }
-
-            EditorGUILayout.EndHorizontal();
-
-            GUILayout.EndArea();
         }
 
-        private void DrawListGUI(Rect areaRect, string[] assetNames, Action<int> callBack = null,
-            Action<Event> onContextClick = null)
-        {
-            if (!Instance || assetNames == null || assetNames.Length <= 0) return;
-            GUILayout.BeginArea(areaRect,
-                AssetEditorStyles.FrameBoxstyle);
-            _listScrollPos = EditorGUILayout.BeginScrollView(_listScrollPos);
-
-            var guiContent = new GUIContent();
-            for (int i = 0; i < assetNames.Length; i++)
-            {
-                var assetName = assetNames[i];
-                if (string.IsNullOrWhiteSpace(assetName)) continue;
-                guiContent.text = assetName;
-                var type = GetBuildinAssetTypeByName(assetName);
-                guiContent.image = AssetPreview.GetMiniTypeThumbnail(type);
-                if (GUILayout.Button(guiContent, GUILayout.MaxHeight(50),
-                    GUILayout.ExpandWidth(true)))
-                    callBack?.Invoke(i);
-            }
-
-            Event evt = Event.current;
-            switch (evt.type)
-            {
-                case EventType.ContextClick:
-                    onContextClick?.Invoke(evt);
-                    break;
-            }
-
-            EditorGUILayout.EndScrollView();
-            GUILayout.EndArea();
-        }
-
-        private void DrawAssetListGUI(Rect areaRect, Object[] assets, Action<int> callBack = null,
-            Action<Event> onContextClick = null)
-        {
-            if (!Instance || assets == null || assets.Length <= 0) return;
-            GUILayout.BeginArea(areaRect,
-                AssetEditorStyles.FrameBoxstyle);
-            _listScrollPos = EditorGUILayout.BeginScrollView(_listScrollPos);
-            var width = Instance.position.width * .25f;
-            var guiContent = new GUIContent();
-
-            for (int i = 0; i < assets.Length; i++)
-            {
-                var assetObj = assets[i];
-                if (!assetObj) continue;
-                guiContent.text = assetObj.name;
-                guiContent.image = AssetPreview.GetMiniThumbnail(assetObj);
-                if (GUILayout.Button(guiContent, GUILayout.MaxHeight(30),
-                    GUILayout.MaxWidth(width)))
-                    callBack?.Invoke(i);
-            }
-
-            Event evt = Event.current;
-            switch (evt.type)
-            {
-                case EventType.ContextClick:
-                    onContextClick?.Invoke(evt);
-                    break;
-            }
-
-            EditorGUILayout.EndScrollView();
-            GUILayout.EndArea();
-        }
-
-        #endregion
 
         #region PrivateMethod
 
@@ -291,6 +363,8 @@ namespace AssetEditor.Editor
         /// <returns></returns>
         private string[] GetAssetsPath(string filterName)
         {
+            if (string.IsNullOrWhiteSpace(_searchFilterName))
+                _searchFilterName = String.Empty;
             var assetGuids = AssetDatabase.FindAssets(string.Format("t:{0} {1}", filterName, _searchFilterName));
             string[] result = new string[assetGuids.Length];
             for (int i = 0; i < assetGuids.Length; i++)
@@ -307,7 +381,7 @@ namespace AssetEditor.Editor
             var assetType = _currentAssetType;
             if (assetType.BaseType == typeof(UnityEngine.ScriptableObject))
             {
-                var key = string.Format("AssetEditor{0}SavePath", assetType);
+                var key = string.Format("AssetEditor.SavePath.{0}", assetType);
                 var savePath = EditorPrefs.GetString(key, "Assets");
                 var nowSavePath = EditorUtility.SaveFilePanelInProject(string.Format("Save {0}", assetType),
                     string.Format("New {0}.asset", assetType.Name), "asset",
@@ -321,6 +395,43 @@ namespace AssetEditor.Editor
                 AssetDatabase.CreateAsset(scriptableObject, savePath);
                 Repaint();
             }
+        }
+
+        private void PingObject(object userData)
+        {
+            var assetObj = (Object)userData;
+            if (!assetObj) return;
+            Selection.activeObject = assetObj;
+            EditorGUIUtility.PingObject(assetObj);
+        }
+
+        private void ResetButtonStyle(Button button)
+        {
+            if (button != null)
+            {
+                var originButtonSample = new Button();
+                button.style.borderBottomColor = originButtonSample.style.borderBottomColor;
+                button.style.borderLeftColor = originButtonSample.style.borderLeftColor;
+                button.style.borderRightColor = originButtonSample.style.borderRightColor;
+                button.style.borderTopColor = originButtonSample.style.borderTopColor;
+            }
+        }
+
+        private void RemoveAssetInspectorEditor(object userdata)
+        {
+            var assetObj = (Object)userdata;
+            if (_selectClickButton == null) return;
+            ResetButtonStyle(_selectClickButton);
+            var currentObj = (Object)_selectClickButton.userData;
+            if (currentObj != assetObj) return;
+            if (_assetList == null) return;
+            if (_imguiAssetInspectorScrollView != null && _assetList.Contains(_imguiAssetInspectorScrollView))
+            {
+                _assetList.Remove(_imguiAssetInspectorScrollView);
+            }
+
+            _selectClickButton = null;
+            _selectAssetObject = null;
         }
 
         private Type GetBuildinAssetTypeByName(string name)

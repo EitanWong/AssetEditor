@@ -5,13 +5,14 @@ using System.Collections.Generic;
 using UnityEditor;
 using UnityEditor.UIElements;
 using UnityEngine;
+using UnityEngine.UIElements;
 using Object = UnityEngine.Object;
 
 namespace AssetEditor.Editor.Window
 {
     public class AssetEditorPreference : UnityEditor.Editor
     {
-        private static AssetEditorConfig _config;
+        private static AssetEditorConfig _config= ScriptableObject.CreateInstance<AssetEditorConfig>();
 
         public static AssetEditorConfig Config
         {
@@ -32,11 +33,8 @@ namespace AssetEditor.Editor.Window
 #pragma warning restore 618
         public static void PreferencesGUI()
         {
-            if (!_config)
-                return;
             var editor = UnityEditor.Editor.CreateEditor(_config);
             editor.OnInspectorGUI();
-
             if (GUI.changed)
             {
                 EditorPrefs.SetString(SaveKey, EditorJsonUtility.ToJson(_config));

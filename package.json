@@ -1,20 +1,20 @@
 {
   "name": "com.lone.asseteditor",
-  "version": "1.2.3",
+  "version": "0.1.1",
   "displayName": "AssetEditor",
   "description": "Unity AssetEditor\nImprove your editor workflow",
-  "documentationUrl": "https://example.com/",
-  "changelogUrl": "https://example.com/changelog.html",
-  "licensesUrl": "https://example.com/licensing.html",
+  "documentationUrl": "https://github.com/LONEStudio/AssetEditor/blob/main/README.md",
+  "changelogUrl": "https://github.com/LONEStudio/AssetEditor/blob/main/CHANGELOG.md",
+  "licensesUrl": "https://github.com/LONEStudio/AssetEditor/blob/main/LICENSE.md",
   "keywords": [
-    "keyword1",
-    "keyword2",
-    "keyword3"
+    "asset",
+    "asseteditor",
+    "adt"
   ],
   "author": {
-    "name": "Unity",
-    "email": "unity@example.com",
-    "url": "https://www.unity3d.com"
+    "name": "LONE",
+    "email": "www.unity.com",
+    "url": "https://www.unity.com"
   },
   "type": "tool"
 }
