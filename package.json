@@ -1,6 +1,6 @@
 {
   "name": "com.lone.asseteditor",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "displayName": "AssetEditor",
   "description": "Unity AssetEditor\nImprove your editor workflow",
   "documentationUrl": "https://github.com/LONEStudio/AssetEditor/blob/main/README.md",

@@ -194,7 +194,7 @@ namespace AssetEditor.Editor
 
             _assetList.Add(assetScrollView);
             _currentAssetsPath = GetAssetsPath(_currentFilterName);
-            
+
             if (_currentAssetsPath != null && _currentAssetsPath.Length > 0)
             {
                 var loadObj = AssetDatabase.LoadAssetAtPath(_currentAssetsPath[0], typeof(Object));
@@ -265,13 +265,13 @@ namespace AssetEditor.Editor
 
             menu.AddSeparator("");
 
-            if (assetObj.GetType().BaseType == typeof(ScriptableObject))
-                menu.AddItem(new GUIContent("Create New"), false, CreateScritableObject);
-
+            if (HasInheritType<ScriptableObject>(assetObj.GetType()))
+                menu.AddItem(new GUIContent("Create New"), false, CreateScriptableObject, assetObj);
             //menu.AddSeparator("");
             menu.ShowAsContext();
             evt.imguiEvent.Use();
         }
+
 
         private void DrawAssetInspectorEditor(Object assetObj)
         {
@@ -317,7 +317,7 @@ namespace AssetEditor.Editor
             {
                 style =
                 {
-                    paddingTop = 5, 
+                    paddingTop = 5,
                     paddingBottom = 5,
                 }
             };
@@ -376,21 +376,22 @@ namespace AssetEditor.Editor
             return result;
         }
 
-        private void CreateScritableObject()
+        private void CreateScriptableObject(object userdata)
         {
-            var assetType = _currentAssetType;
-            if (assetType.BaseType == typeof(UnityEngine.ScriptableObject))
+            if (userdata == null) return;
+            var targetType = userdata.GetType();
+            if (HasInheritType<ScriptableObject>(targetType))
             {
-                var key = string.Format("AssetEditor.SavePath.{0}", assetType);
+                var key = string.Format("AssetEditor.SavePath.{0}", targetType);
                 var savePath = EditorPrefs.GetString(key, "Assets");
-                var nowSavePath = EditorUtility.SaveFilePanelInProject(string.Format("Save {0}", assetType),
-                    string.Format("New {0}.asset", assetType.Name), "asset",
+                var nowSavePath = EditorUtility.SaveFilePanelInProject(string.Format("Save {0}", targetType),
+                    string.Format("New {0}.asset", targetType.Name), "asset",
                     "Save At", savePath);
                 if (string.IsNullOrWhiteSpace(nowSavePath))
                     return;
                 savePath = nowSavePath;
                 EditorPrefs.SetString(key, savePath);
-                var scriptableObject = UnityEngine.ScriptableObject.CreateInstance(assetType);
+                var scriptableObject = UnityEngine.ScriptableObject.CreateInstance(targetType);
                 var fileName = Path.GetFileNameWithoutExtension(savePath);
                 AssetDatabase.CreateAsset(scriptableObject, savePath);
                 Repaint();
@@ -477,6 +478,28 @@ namespace AssetEditor.Editor
             }
 
             return typeof(DefaultAsset);
+        }
+
+        /// <summary>
+        /// Check if class has inherit Type
+        /// </summary>
+        /// <param name="targetType"></param>
+        /// <typeparam name="T"></typeparam>
+        /// <returns></returns>
+        private bool HasInheritType<T>(Type targetType)
+        {
+            Type type = targetType;
+            while (type != null)
+            {
+                if (type == typeof(T))
+                {
+                    return true;
+                }
+
+                type = type.BaseType;
+            }
+
+            return false;
         }
 
         #endregion
