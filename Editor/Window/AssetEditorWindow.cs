@@ -250,26 +250,40 @@ namespace AssetEditor.Editor
 
         private void ONContextClickHandler(ContextClickEvent evt)
         {
-            if (_currentAssetType == null) return;
-            var target = ((Button)evt.target);
-            var assetObj = (Object)target.userData;
-            var menu = new GenericMenu();
-            menu.AddItem(new GUIContent("Ping"), false, PingObject, assetObj);
-
-            if (_selectClickButton != null)
+            if (_currentAssetType == null || evt.target == null) return;
+            try
             {
-                var currentObj = (Object)_selectClickButton.userData;
-                if (currentObj == assetObj)
-                    menu.AddItem(new GUIContent("UnSelect"), false, RemoveAssetInspectorEditor, assetObj);
+                var menu = new GenericMenu();
+                if (HasInheritType<Button>(evt.target.GetType()))
+                {
+                    var target = ((Button)evt.target);
+                    var assetObj = (Object)target.userData;
+
+                    menu.AddItem(new GUIContent("Ping"), false, PingObject, assetObj);
+
+                    if (_selectClickButton != null)
+                    {
+                        var currentObj = (Object)_selectClickButton.userData;
+                        if (currentObj == assetObj)
+                            menu.AddItem(new GUIContent("UnSelect"), false, RemoveAssetInspectorEditor, assetObj);
+                    }
+
+                    menu.AddSeparator("");
+
+                    if (HasInheritType<ScriptableObject>(assetObj.GetType()))
+                        menu.AddItem(new GUIContent("Create New"), false, CreateScriptableObject, assetObj);
+                    //menu.AddSeparator("");    
+                }
+
+                menu.ShowAsContext();
+                evt.imguiEvent.Use();
             }
-
-            menu.AddSeparator("");
-
-            if (HasInheritType<ScriptableObject>(assetObj.GetType()))
-                menu.AddItem(new GUIContent("Create New"), false, CreateScriptableObject, assetObj);
-            //menu.AddSeparator("");
-            menu.ShowAsContext();
-            evt.imguiEvent.Use();
+#pragma warning disable 168
+            catch (Exception e)
+#pragma warning restore 168
+            {
+                // ignored
+            }
         }
 
 
