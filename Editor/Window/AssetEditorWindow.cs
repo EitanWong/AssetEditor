@@ -25,6 +25,7 @@ namespace AssetEditor.Editor
         public string[] assetFilterNames;
         public AssetEditorWindow Instance => this;
         const string Title = "AssetEditor";
+        private const char SplitChar = '.';
         private IMGUIContainer _imguiAssetInspectorContainer;
         private ScrollView _imguiAssetInspectorScrollView;
         private VisualElement _assetList;
@@ -36,6 +37,7 @@ namespace AssetEditor.Editor
         private string _searchFilterName;
         private Object _selectAssetObject;
         private Button _selectClickButton;
+        private string _selectAssetGuid;
 
         [MenuItem("Window/AssetEditor")]
         public static void GetWindow()
@@ -68,10 +70,17 @@ namespace AssetEditor.Editor
         private void OnFocus()
         {
             assetFilterNames = AssetEditorPreference.Config.AssetFilterNames.ToArray();
-            var sp = titleContent.text.Split(':');
+            var sp = titleContent.text.Split(SplitChar);
             if (sp.Length > 1)
             {
-                OnFilterSelected(sp[1]);
+                if (sp.Length > 2)
+                {
+                    OnFilterSelected(sp[1], sp[2]);
+                }
+                else
+                {
+                    OnFilterSelected(sp[1]);
+                }
             }
             else
             {
@@ -108,17 +117,26 @@ namespace AssetEditor.Editor
             rootVisualElement.Add(filterScrollView);
         }
 
-        private void OnFilterSelected(string filterName)
+        private void OnFilterSelected(string filterName, string assetGuid = null)
         {
+            if (!string.IsNullOrWhiteSpace(assetGuid))
+            {
+                var path = AssetDatabase.GUIDToAssetPath(assetGuid);
+                if (!string.IsNullOrWhiteSpace(path))
+                    _selectAssetObject = AssetDatabase.LoadAssetAtPath<Object>(path);
+                _selectAssetGuid = assetGuid;
+            }
+
             DrawAssetEditorUIElement(filterName);
         }
+
 
         private void DrawAssetEditorUIElement(string filterName)
         {
             rootVisualElement.Clear();
             _currentFilterName = filterName.Trim();
-            titleContent = new GUIContent(string.Format("{0}: {1}", Title, _currentFilterName),
-                AssetPreview.GetMiniTypeThumbnail(GetBuildinAssetTypeByName(_currentFilterName)));
+
+            UpdateTitle();
 
             VisualElement toolbar = new VisualElement()
             {
@@ -224,9 +242,17 @@ namespace AssetEditor.Editor
                     });
                     assetButton.RegisterCallback<ClickEvent>(evt =>
                     {
-                        DrawAssetInspectorEditor(assetObj);
-                        DrawCurrentClickButtonBorderEffect(assetButton);
+                        _selectAssetObject = assetObj;
+                        _selectClickButton = assetButton;
+                        _selectAssetGuid = AssetDatabase.AssetPathToGUID(path);
+                        SelectAssetObject(assetButton);
                     });
+
+                    if ((Object)assetButton.userData == _selectAssetObject)
+                    {
+                        SelectAssetObject(assetButton);
+                    }
+
                     assetButton.RegisterCallback<ContextClickEvent>(evt => ONContextClickHandler(evt));
                     assetScrollView.Add(assetButton);
                 }
@@ -234,6 +260,13 @@ namespace AssetEditor.Editor
 
             //_assetList.RegisterCallback<ContextClickEvent>(evt => { ONContextClickHandler(evt); });
             rootVisualElement.Add(_assetList);
+        }
+
+        private void SelectAssetObject(Button assetButton)
+        {
+            DrawAssetInspectorEditor(_selectAssetObject);
+            DrawCurrentClickButtonBorderEffect(assetButton);
+            UpdateTitle();
         }
 
         private void DrawCurrentClickButtonBorderEffect(Button button)
@@ -265,7 +298,7 @@ namespace AssetEditor.Editor
                     {
                         var currentObj = (Object)_selectClickButton.userData;
                         if (currentObj == assetObj)
-                            menu.AddItem(new GUIContent("UnSelect"), false, RemoveAssetInspectorEditor, assetObj);
+                            menu.AddItem(new GUIContent("UnSelect"), false, UnSelectCurrentAssetObject, assetObj);
                     }
 
                     menu.AddSeparator("");
@@ -339,7 +372,6 @@ namespace AssetEditor.Editor
             _imguiAssetInspectorScrollView.Add(assetInfoLabel);
 
             _imguiAssetInspectorContainer = new IMGUIContainer();
-
             //_imguiAssetInspectorContainer.style.minWidth= new StyleLength(Length.Percent(100));
             //_imguiAssetInspectorContainer.style.minWidth = position.width-250;
             //_imguiAssetInspectorContainer.style.maxWidth = new StyleLength(Length.Percent(100));
@@ -359,7 +391,8 @@ namespace AssetEditor.Editor
                 editor?.OnInspectorGUI();
                 var previewRect = GUILayoutUtility.GetRect(rect.width * .5f, rect.height * .5f);
                 // ReSharper disable once Unity.NoNullPropagation
-                editor?.OnInteractivePreviewGUI(previewRect, EditorStyles.whiteLabel);
+                if (editor.HasPreviewGUI())
+                    editor?.OnInteractivePreviewGUI(previewRect, EditorStyles.whiteLabel);
                 GUILayout.BeginHorizontal();
                 // ReSharper disable once Unity.NoNullPropagation
                 editor?.OnPreviewSettings();
@@ -432,6 +465,15 @@ namespace AssetEditor.Editor
             }
         }
 
+        private void UnSelectCurrentAssetObject(object userdata)
+        {
+            RemoveAssetInspectorEditor(userdata);
+            _selectClickButton = null;
+            _selectAssetObject = null;
+            _selectAssetGuid = null;
+            UpdateTitle();
+        }
+
         private void RemoveAssetInspectorEditor(object userdata)
         {
             var assetObj = (Object)userdata;
@@ -444,9 +486,21 @@ namespace AssetEditor.Editor
             {
                 _assetList.Remove(_imguiAssetInspectorScrollView);
             }
+        }
 
-            _selectClickButton = null;
-            _selectAssetObject = null;
+
+        private void UpdateTitle()
+        {
+            if (string.IsNullOrWhiteSpace(_selectAssetGuid))
+            {
+                titleContent = new GUIContent(string.Format("{0}.{1}", Title, _currentFilterName),
+                    AssetPreview.GetMiniTypeThumbnail(GetBuildinAssetTypeByName(_currentFilterName)));
+            }
+            else
+            {
+                titleContent = new GUIContent(string.Format("{0}.{1}.{2}", Title, _currentFilterName, _selectAssetGuid),
+                    AssetPreview.GetMiniTypeThumbnail(GetBuildinAssetTypeByName(_currentFilterName)));
+            }
         }
 
         private Type GetBuildinAssetTypeByName(string name)

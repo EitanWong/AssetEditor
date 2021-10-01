@@ -1,6 +1,14 @@
 # Changelog
 All notable changes to this project will be documented in this file.
 
+## [0.1.3] - 2021-10-2
+### Changed
+- Fix the bug of automatic deselection caused by OnFocus method
+- 修复OnFocus方法导致的自动取消选择BUG
+### Add
+- The current selection to edit the resource, after recompiling the script, still keep the selection
+- 当前选择编辑资源，重新编译脚本以后，依然保持选择
+
 ## [0.1.2] - 2021-09-17
 ### Changed
 - fix create ScriptableObject feature
