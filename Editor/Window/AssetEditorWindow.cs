@@ -243,14 +243,13 @@ namespace AssetEditor.Editor
                     assetButton.RegisterCallback<ClickEvent>(evt =>
                     {
                         _selectAssetObject = assetObj;
-                        _selectClickButton = assetButton;
                         _selectAssetGuid = AssetDatabase.AssetPathToGUID(path);
-                        SelectAssetObject(assetButton);
+                        SelectButton(assetButton);
                     });
 
                     if ((Object)assetButton.userData == _selectAssetObject)
                     {
-                        SelectAssetObject(assetButton);
+                        SelectButton(assetButton);
                     }
 
                     assetButton.RegisterCallback<ContextClickEvent>(evt => ONContextClickHandler(evt));
@@ -262,17 +261,18 @@ namespace AssetEditor.Editor
             rootVisualElement.Add(_assetList);
         }
 
-        private void SelectAssetObject(Button assetButton)
+        private void SelectButton(Button assetButton)
         {
-            DrawAssetInspectorEditor(_selectAssetObject);
+            if (_selectClickButton != null)
+                ResetButtonStyle(_selectClickButton);
+            _selectClickButton = assetButton;
             DrawCurrentClickButtonBorderEffect(assetButton);
+            DrawAssetInspectorEditor(_selectAssetObject);
             UpdateTitle();
         }
 
         private void DrawCurrentClickButtonBorderEffect(Button button)
         {
-            if (_selectClickButton != null)
-                ResetButtonStyle(_selectClickButton);
             _selectClickButton = button;
             _selectClickButton.style.borderBottomColor = Color.cyan;
             _selectClickButton.style.borderLeftColor = Color.cyan;
@@ -468,6 +468,7 @@ namespace AssetEditor.Editor
         private void UnSelectCurrentAssetObject(object userdata)
         {
             RemoveAssetInspectorEditor(userdata);
+            ResetButtonStyle(_selectClickButton);
             _selectClickButton = null;
             _selectAssetObject = null;
             _selectAssetGuid = null;
@@ -478,7 +479,6 @@ namespace AssetEditor.Editor
         {
             var assetObj = (Object)userdata;
             if (_selectClickButton == null) return;
-            ResetButtonStyle(_selectClickButton);
             var currentObj = (Object)_selectClickButton.userData;
             if (currentObj != assetObj) return;
             if (_assetList == null) return;
