@@ -1,6 +1,14 @@
 # Changelog
 All notable changes to this project will be documented in this file.
 
+## [0.1.4] - 2021-11-15
+### Changed
+- fix asset refresh Bug
+- 修复资源刷新的Bug
+- ### Added
+- Add asset tree view
+- 添加资源树状图
+
 ## [0.1.3] - 2021-10-2
 ### Changed
 - Fix the bug of automatic deselection caused by OnFocus method

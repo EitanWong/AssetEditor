@@ -4,6 +4,9 @@ using System.Collections.Generic;
 using System.IO;
 using System.Reflection;
 using AssetEditor.Editor.Window;
+using Codice.Client.Common;
+using Editor.Scripts.Enumerate;
+using TreeView;
 using UnityEditor;
 using UnityEditor.Animations;
 using UnityEditor.IMGUI.Controls;
@@ -29,15 +32,24 @@ namespace AssetEditor.Editor
         private IMGUIContainer _imguiAssetInspectorContainer;
         private ScrollView _imguiAssetInspectorScrollView;
         private VisualElement _assetList;
+        private ScrollView assetSelectScrollView;
 
         private string _currentFilterName;
         private string[] _currentAssetsPath;
+
         private Type _currentAssetType;
 
         private string _searchFilterName;
         private Object _selectAssetObject;
         private Button _selectClickButton;
         private string _selectAssetGuid;
+
+        private AssetTree _assetTree;
+        private AssetTreeIMGUI _assetTreeGUI;
+
+        private IMGUIContainer treeIMGUIContainer;
+        private AssetSelectViewType _viewType;
+        private readonly int viewTypeCount = 1;
 
         [MenuItem("Window/AssetEditor")]
         public static void GetWindow()
@@ -93,12 +105,14 @@ namespace AssetEditor.Editor
         private void DrawAssetsFilterListUIElement()
         {
             rootVisualElement.Clear();
+            if (_assetTree != null)
+                _assetTree.Clear();
             titleContent = new GUIContent(Title);
             ScrollView filterScrollView = new ScrollView();
             for (int i = 0; i < assetFilterNames.Length; i++)
             {
                 var filterName = assetFilterNames[i];
-                Button filterSelectButton = new Button { text = filterName };
+                Button filterSelectButton = new Button {text = filterName};
                 filterSelectButton.Add(new Image()
                 {
                     image = AssetPreview.GetMiniTypeThumbnail(GetBuildinAssetTypeByName(filterName)),
@@ -157,9 +171,30 @@ namespace AssetEditor.Editor
                     width = new StyleLength(Length.Percent(10)),
                 }
             };
+
+            Button viewTypeButton = new Button
+            {
+                text = string.Format("{0}", _viewType.ToString()),
+                style =
+                {
+                    width = new StyleLength(Length.Percent(10)),
+                }
+            };
+
+            viewTypeButton.RegisterCallback<ClickEvent>(evt =>
+            {
+                _viewType++;
+                if (_viewType > (AssetSelectViewType) viewTypeCount)
+                    _viewType = 0;
+                viewTypeButton.text = string.Format("{0}", _viewType.ToString());
+
+                DrawAssetSelectListUIElement();
+            });
+
             backButton.RegisterCallback<ClickEvent>(evt => DrawAssetsFilterListUIElement());
             //backButton.style.maxWidth = new StyleLength(Length.Percent(25));
             toolbar.Add(backButton);
+            toolbar.Add(viewTypeButton);
 
             ToolbarSearchField searchTextField = new ToolbarSearchField()
             {
@@ -173,15 +208,16 @@ namespace AssetEditor.Editor
             searchTextField.RegisterValueChangedCallback(evt =>
                 {
                     _searchFilterName = evt.newValue;
-                    DrawAssetButtonListUIElement();
+                    DrawAssetSelectListUIElement();
                 }
             );
             toolbar.Add(searchTextField);
             rootVisualElement.Add(toolbar);
-            DrawAssetButtonListUIElement();
+            DrawAssetSelectListUIElement();
         }
 
-        private void DrawAssetButtonListUIElement()
+
+        private void DrawAssetSelectListUIElement()
         {
             if (_assetList != null && rootVisualElement.Contains(_assetList))
             {
@@ -199,63 +235,40 @@ namespace AssetEditor.Editor
                 }
             };
             _assetList.style.flexDirection = FlexDirection.Row;
-            ScrollView assetScrollView = new ScrollView()
+            if (assetSelectScrollView == null)
             {
-                style =
+                assetSelectScrollView = new ScrollView()
                 {
-                    backgroundColor = new Color(48f / 255, 48f / 255, 48f / 255),
-                    minWidth = new StyleLength(Length.Percent(25)),
-                    width = new StyleLength(Length.Percent(25))
-                }
-            };
-
-
-            _assetList.Add(assetScrollView);
-            _currentAssetsPath = GetAssetsPath(_currentFilterName);
-
-            if (_currentAssetsPath != null && _currentAssetsPath.Length > 0)
-            {
-                var loadObj = AssetDatabase.LoadAssetAtPath(_currentAssetsPath[0], typeof(Object));
-                _currentAssetType = loadObj.GetType();
-            }
-
-            if (_currentAssetsPath != null && _currentAssetsPath.Length > 0)
-            {
-                foreach (var path in _currentAssetsPath)
-                {
-                    var assetObj = AssetDatabase.LoadAssetAtPath(path, typeof(Object));
-                    Button assetButton = new Button
+                    style =
                     {
-                        text = assetObj.name,
-                        userData = assetObj
-                    };
-                    assetButton.Add(new Image()
-                    {
-                        image = AssetPreview.GetMiniThumbnail(assetObj),
-                        style =
-                        {
-                            maxHeight = 25,
-                            maxWidth = 25,
-                            minHeight = 25,
-                            minWidth = 25,
-                        }
-                    });
-                    assetButton.RegisterCallback<ClickEvent>(evt =>
-                    {
-                        _selectAssetObject = assetObj;
-                        _selectAssetGuid = AssetDatabase.AssetPathToGUID(path);
-                        SelectButton(assetButton);
-                    });
-
-                    if ((Object)assetButton.userData == _selectAssetObject)
-                    {
-                        SelectButton(assetButton);
+                        backgroundColor = new Color(48f / 255, 48f / 255, 48f / 255),
+                        minWidth = new StyleLength(Length.Percent(25)),
+                        width = new StyleLength(Length.Percent(25))
                     }
-
-                    assetButton.RegisterCallback<ContextClickEvent>(evt => ONContextClickHandler(evt));
-                    assetScrollView.Add(assetButton);
-                }
+                };
             }
+            else
+            {
+                assetSelectScrollView.Clear();
+            }
+
+
+            _assetList.Add(assetSelectScrollView);
+
+
+            _currentAssetsPath = GetAssetsPath(_currentFilterName); //GetSearchedAssetsPath
+
+
+            switch (_viewType)
+            {
+                case AssetSelectViewType.ListView:
+                    AddButtonAssetList(assetSelectScrollView);
+                    break;
+                case AssetSelectViewType.TreeView:
+                    assetSelectScrollView.Add(DrawAssetTree());
+                    break;
+            }
+
 
             //_assetList.RegisterCallback<ContextClickEvent>(evt => { ONContextClickHandler(evt); });
             rootVisualElement.Add(_assetList);
@@ -267,7 +280,7 @@ namespace AssetEditor.Editor
                 ResetButtonStyle(_selectClickButton);
             _selectClickButton = assetButton;
             DrawCurrentClickButtonBorderEffect(assetButton);
-            DrawAssetInspectorEditor(_selectAssetObject);
+            TrySelectAsset();
             UpdateTitle();
         }
 
@@ -281,6 +294,39 @@ namespace AssetEditor.Editor
         }
 
 
+        private void ONContextClickHandler(Event @event)
+        {
+            if (@event == null) return;
+            try
+            {
+                var menu = new GenericMenu();
+
+                var assetObj = _selectAssetObject;
+
+                menu.AddItem(new GUIContent("Ping"), false, PingObject, assetObj);
+
+                if (_selectAssetObject != null)
+                {
+                    menu.AddItem(new GUIContent("UnSelect"), false, UnSelectCurrentAssetObject, assetObj);
+                }
+
+                menu.AddSeparator("");
+
+                if (HasInheritType<ScriptableObject>(assetObj.GetType()))
+                    menu.AddItem(new GUIContent("Create New"), false, CreateScriptableObject, assetObj);
+                //menu.AddSeparator("");    
+
+                menu.ShowAsContext();
+                @event.Use();
+            }
+#pragma warning disable 168
+            catch (Exception e)
+#pragma warning restore 168
+            {
+                // ignored
+            }
+        }
+
         private void ONContextClickHandler(ContextClickEvent evt)
         {
             if (_currentAssetType == null || evt.target == null) return;
@@ -289,14 +335,14 @@ namespace AssetEditor.Editor
                 var menu = new GenericMenu();
                 if (HasInheritType<Button>(evt.target.GetType()))
                 {
-                    var target = ((Button)evt.target);
-                    var assetObj = (Object)target.userData;
+                    var target = ((Button) evt.target);
+                    var assetObj = (Object) target.userData;
 
                     menu.AddItem(new GUIContent("Ping"), false, PingObject, assetObj);
 
                     if (_selectClickButton != null)
                     {
-                        var currentObj = (Object)_selectClickButton.userData;
+                        var currentObj = (Object) _selectClickButton.userData;
                         if (currentObj == assetObj)
                             menu.AddItem(new GUIContent("UnSelect"), false, UnSelectCurrentAssetObject, assetObj);
                     }
@@ -323,7 +369,9 @@ namespace AssetEditor.Editor
         private void DrawAssetInspectorEditor(Object assetObj)
         {
             if (_assetList == null) return;
-            RemoveAssetInspectorEditor(_selectAssetObject);
+            if (_selectAssetObject)
+                RemoveAssetInspectorEditor(_selectAssetObject);
+
             _selectAssetObject = assetObj;
             _imguiAssetInspectorScrollView = new ScrollView()
             {
@@ -381,6 +429,8 @@ namespace AssetEditor.Editor
         }
 
 
+        #region PrivateMethod
+
         private void DrawIMGUIInspector()
         {
             var editor = UnityEditor.Editor.CreateEditor(_selectAssetObject);
@@ -400,8 +450,129 @@ namespace AssetEditor.Editor
             }
         }
 
+        /// <summary>
+        /// DrawAssetTreeView
+        /// </summary>
+        private IMGUIContainer DrawAssetTree()
+        {
+            if (treeIMGUIContainer == null)
+                treeIMGUIContainer = new IMGUIContainer();
 
-        #region PrivateMethod
+            if (_assetTree == null)
+            {
+                _assetTree = new AssetTree();
+                _assetTree.Clear();
+            }
+
+            foreach (var path in _currentAssetsPath)
+                _assetTree.AddAsset(AssetDatabase.AssetPathToGUID(path));
+
+            if (_assetTreeGUI == null)
+                _assetTreeGUI = new AssetTreeIMGUI(_assetTree.Root);
+
+
+            treeIMGUIContainer.onGUIHandler = delegate
+            {
+                Event @event = Event.current;
+                
+                if (@event.type == EventType.ContextClick)
+                {
+                    ONContextClickHandler(@event);
+                }
+
+                _assetTreeGUI.DrawTreeLayout();
+            };
+
+            if (_selectAssetObject)
+            {
+                var findNode = _assetTree.FindAssetByGuid(_selectAssetGuid);
+                _assetTreeGUI.Selected(findNode);
+            }
+
+            _assetTreeGUI.OnSelected += OnTreeAssetSelect;
+
+            TrySelectAsset();
+            return treeIMGUIContainer;
+        }
+
+        /// <summary>
+        /// Handler 
+        /// </summary>
+        /// <param name="treeData"></param>
+        private void OnTreeAssetSelect(TreeNode<AssetData> treeData)
+        {
+            var asset = AssetDatabase.LoadAssetAtPath(treeData.Data.fullPath, typeof(Object));
+            if (asset)
+            {
+                _selectAssetObject = asset;
+                _selectAssetGuid = AssetDatabase.AssetPathToGUID(AssetDatabase.GetAssetPath(_selectAssetObject));
+                //DrawAssetInspectorEditor(asset);
+            }
+
+            TrySelectAsset();
+        }
+
+        /// <summary>
+        /// TrySelectAssetToShowAssetInspectorView
+        /// </summary>
+        private void TrySelectAsset()
+        {
+            if (!_selectAssetObject) return;
+            DrawAssetInspectorEditor(_selectAssetObject);
+        }
+
+        private void AddButtonAssetList(VisualElement root)
+        {
+            #region DrawButtons
+
+            if (_currentAssetsPath != null && _currentAssetsPath.Length > 0)
+            {
+                var loadObj = AssetDatabase.LoadAssetAtPath(_currentAssetsPath[0], typeof(Object));
+                _currentAssetType = loadObj.GetType();
+            }
+
+            if (_currentAssetsPath != null && _currentAssetsPath.Length > 0)
+            {
+                foreach (var path in _currentAssetsPath)
+                {
+                    var assetObj = AssetDatabase.LoadAssetAtPath(path, typeof(Object));
+                    Button assetButton = new Button
+                    {
+                        text = assetObj.name,
+                        userData = assetObj
+                    };
+                    assetButton.Add(new Image()
+                    {
+                        image = AssetPreview.GetMiniThumbnail(assetObj),
+                        style =
+                        {
+                            maxHeight = 15,
+                            maxWidth = 25,
+                            minHeight = 15,
+                            minWidth = 25,
+                        }
+                    });
+                    assetButton.RegisterCallback<ClickEvent>(evt =>
+                    {
+                        _selectAssetObject = assetObj;
+                        _selectAssetGuid = AssetDatabase.AssetPathToGUID(path);
+                        SelectButton(assetButton);
+                    });
+
+                    if ((Object) assetButton.userData == _selectAssetObject)
+                    {
+                        SelectButton(assetButton);
+                    }
+
+                    assetButton.RegisterCallback<ContextClickEvent>(evt => ONContextClickHandler(evt));
+                    root.Add(assetButton);
+                }
+            }
+
+            TrySelectAsset();
+
+            #endregion
+        }
 
         /// <summary>
         /// GetAssetsPath
@@ -447,7 +618,7 @@ namespace AssetEditor.Editor
 
         private void PingObject(object userData)
         {
-            var assetObj = (Object)userData;
+            var assetObj = (Object) userData;
             if (!assetObj) return;
             Selection.activeObject = assetObj;
             EditorGUIUtility.PingObject(assetObj);
@@ -472,15 +643,17 @@ namespace AssetEditor.Editor
             _selectClickButton = null;
             _selectAssetObject = null;
             _selectAssetGuid = null;
+            _assetTreeGUI.Selected(null);
             UpdateTitle();
         }
 
         private void RemoveAssetInspectorEditor(object userdata)
         {
-            var assetObj = (Object)userdata;
-            if (_selectClickButton == null) return;
-            var currentObj = (Object)_selectClickButton.userData;
-            if (currentObj != assetObj) return;
+            var assetObj = (Object) userdata;
+            //if (_selectClickButton == null) return;
+            //var currentObj = (Object) _selectClickButton.userData;
+
+            if (_selectAssetObject != assetObj) return;
             if (_assetList == null) return;
             if (_imguiAssetInspectorScrollView != null && _assetList.Contains(_imguiAssetInspectorScrollView))
             {
