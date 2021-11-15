@@ -1,13 +1,8 @@
 ﻿using UnityEngine;
 using UnityEditor;
-using System.Collections;
 
-/**
- * TreeNode.cs
- * Author: Luke Holland (http://lukeholland.me/)
- */
 
-namespace TreeView {
+namespace AssetEditor.Editor {
 
 	public class AssetTreeIMGUI : TreeIMGUI<AssetData>
 	{

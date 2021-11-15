@@ -2,12 +2,9 @@
 using UnityEditor;
 using UnityEngine;
 
-/**
- * TreeNode.cs
- * Author: Luke Holland (http://lukeholland.me/)
- */
 
-namespace TreeView
+
+namespace AssetEditor.Editor
 {
     public class AssetTree
     {

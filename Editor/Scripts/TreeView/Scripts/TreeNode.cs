@@ -1,12 +1,7 @@
-﻿using System;
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 
-/**
- * TreeNode.cs
- * Author: Luke Holland (http://lukeholland.me/)
- */
-
-namespace TreeView {
+// ReSharper disable once CheckNamespace
+namespace AssetEditor.Editor {
 
 	public class TreeNode<T>
 	{

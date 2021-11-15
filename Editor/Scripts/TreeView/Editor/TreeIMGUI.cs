@@ -9,7 +9,7 @@ using System.Collections.Generic;
  * Author: Luke Holland (http://lukeholland.me/)
  */
 
-namespace TreeView
+namespace AssetEditor.Editor
 {
     public class TreeIMGUI<T> where T : ITreeIMGUIData
     {

@@ -1,4 +1,4 @@
-namespace Editor.Scripts.Enumerate
+namespace AssetEditor.Enumerate
 {
     public enum AssetSelectViewType
     {
